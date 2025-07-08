@@ -130,7 +130,7 @@ map-business-tracker/
 
 1. **Build the web version**
    ```bash
-   npx expo export:web
+   npx expo export --platform web
    ```
 
 2. **Deploy to GitHub Pages**
@@ -156,11 +156,11 @@ map-business-tracker/
          with:
            node-version: '18'
        - run: npm install
-       - run: npx expo export:web
+       - run: npx expo export --platform web
        - uses: peaceiris/actions-gh-pages@v3
          with:
            github_token: ${{ secrets.GITHUB_TOKEN }}
-           publish_dir: ./web-build
+           publish_dir: ./dist
    ```
 
 ### Mobile Deployment
