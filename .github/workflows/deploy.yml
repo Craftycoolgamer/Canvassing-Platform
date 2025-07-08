@@ -35,7 +35,7 @@ jobs:
       run: npm ci
       
     - name: Build web version
-      run: npx expo export --platform web --public-url https://craftycoolgamer.github.io/Canvassing-Platform/
+      run: npx expo export --platform web
       
     - name: Setup Pages
       uses: actions/configure-pages@v4
