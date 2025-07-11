@@ -707,7 +707,7 @@ export default function BusinessListScreen() {
                       <Ionicons name="person" size={16} color="#6c757d" />
                       <Text style={styles.detailText}>
                         {b.contactName}
-                        {hasValue(b.contactPhone) ? ` (${formatPhoneNumber(b.contactPhone)})` : ''}
+                        {hasValue(b.contactPhone) ? ` ${formatPhoneNumber(b.contactPhone)}` : ''}
                       </Text>
                     </View>
                   )}

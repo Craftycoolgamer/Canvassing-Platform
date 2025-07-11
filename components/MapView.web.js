@@ -32,6 +32,31 @@ function createColoredIcon(color) {
   });
 }
 
+// Helper to create a cluster icon
+function createClusterIcon(color, count) {
+  return L.divIcon({
+    html: `<div style="
+      background: ${color};
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      font-size: 18px;
+      font-weight: bold;
+      color: #fff;">
+      ${count}
+    </div>`,
+    className: '',
+    iconSize: [48, 48],
+    iconAnchor: [24, 48],
+    popupAnchor: [0, -48],
+  });
+}
+
 // Simple component to handle map view changes
 function MapController({ center, zoom, clickedPin }) {
   const map = useMap();
@@ -80,6 +105,7 @@ export default function WebMapViewWrapper({
   onEdit = () => {},
   onDelete = () => {},
   onMarkerPress = () => {},
+  onZoomChange = () => {},
 }) {
   const [clickedPin, setClickedPin] = useState(null);
   
@@ -94,6 +120,8 @@ export default function WebMapViewWrapper({
   };
 
   function MapEvents() {
+    const map = useMap();
+    
     useMapEvents({
       click(e) {
         onMapPress({
@@ -104,6 +132,12 @@ export default function WebMapViewWrapper({
             },
           },
         });
+      },
+      zoomend() {
+        // Only update clustering zoom, don't interfere with map behavior
+        if (onZoomChange) {
+          onZoomChange(map.getZoom());
+        }
       },
     });
     return null;
@@ -136,74 +170,85 @@ export default function WebMapViewWrapper({
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="© OpenStreetMap contributors"
+          attribution="\u00a9 OpenStreetMap contributors"
           maxZoom={19}
           minZoom={3}
         />
         <MapController center={mapCenter} zoom={zoom} clickedPin={clickedPin} />
         {markers.map(marker => (
-          <Marker
-            key={marker.id}
-            position={[marker.coordinate.latitude, marker.coordinate.longitude]}
-            icon={createColoredIcon(STATUS_COLORS[marker.status] || '#6c757d')}
-            eventHandlers={{
-              click: () => handleMarkerClick(marker.id),
-            }}
-          >
-            <Popup
-              className="custom-popup"
-              style={{
-                borderRadius: '8px',
-                border: 'none',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                padding: '0',
-                margin: '0',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          marker.isCluster ? (
+            <Marker
+              key={marker.id}
+              position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+              icon={createClusterIcon(STATUS_COLORS[marker.status] || '#6c757d', marker.count)}
+              eventHandlers={{
+                click: () => handleMarkerClick(marker.id),
+              }}
+            />
+          ) : (
+            <Marker
+              key={marker.id}
+              position={[marker.coordinate.latitude, marker.coordinate.longitude]}
+              icon={createColoredIcon(STATUS_COLORS[marker.status] || '#6c757d')}
+              eventHandlers={{
+                click: () => handleMarkerClick(marker.id),
               }}
             >
-              <div style={{
-                padding: '12px 16px',
-                minWidth: '200px',
-                backgroundColor: '#fff',
-                borderRadius: '8px'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  marginBottom: '8px'
-                }}>
-                  <h3 style={{
-                    margin: '0',
-                    fontSize: '16px',
-                    fontWeight: '600',
-                    color: '#2c3e50'
-                  }}>
-                    {marker.title}
-                  </h3>
-                  <span style={{
-                    padding: '4px 8px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: '600',
-                    color: '#fff',
-                    backgroundColor: STATUS_COLORS[marker.status] || '#6c757d',
-                    textTransform: 'capitalize'
-                  }}>
-                    {marker.status}
-                  </span>
-                </div>
-                <p style={{
+              <Popup
+                className="custom-popup"
+                style={{
+                  borderRadius: '8px',
+                  border: 'none',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  padding: '0',
                   margin: '0',
-                  fontSize: '14px',
-                  color: '#6c757d',
-                  fontFamily: 'Menlo, Monaco, monospace'
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                }}
+              >
+                <div style={{
+                  padding: '12px 16px',
+                  minWidth: '200px',
+                  backgroundColor: '#fff',
+                  borderRadius: '8px'
                 }}>
-                  {marker.coordinate.latitude.toFixed(5)}, {marker.coordinate.longitude.toFixed(5)}
-                </p>
-              </div>
-            </Popup>
-          </Marker>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: '8px'
+                  }}>
+                    <h3 style={{
+                      margin: '0',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      color: '#2c3e50'
+                    }}>
+                      {marker.title}
+                    </h3>
+                    <span style={{
+                      padding: '4px 8px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: '#fff',
+                      backgroundColor: STATUS_COLORS[marker.status] || '#6c757d',
+                      textTransform: 'capitalize'
+                    }}>
+                      {marker.status}
+                    </span>
+                  </div>
+                  <p style={{
+                    margin: '0',
+                    fontSize: '14px',
+                    color: '#6c757d',
+                    fontFamily: 'Menlo, Monaco, monospace'
+                  }}>
+                    {marker.coordinate.latitude.toFixed(5)}, {marker.coordinate.longitude.toFixed(5)}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )
         ))}
         <MapEvents />
       </MapContainer>

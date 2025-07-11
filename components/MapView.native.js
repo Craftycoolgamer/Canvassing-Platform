@@ -1,12 +1,7 @@
 import React from 'react';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import { View, Text, TouchableOpacity, Pressable } from 'react-native';
-
-const STATUS_COLORS = {
-  open: 'green',
-  closed: 'red',
-  pending: 'orange',
-};
+import { STATUS_COLORS } from '../constants/StatusColors';
 
 export default function NativeMapViewWrapper({
   markers = [],
@@ -17,6 +12,7 @@ export default function NativeMapViewWrapper({
   onEdit = () => {},
   onDelete = () => {},
   onMarkerPress = () => {},
+  onZoomChange = () => {},
 }) {
   const mapRef = React.useRef();
   const [region, setRegion] = React.useState({
@@ -50,14 +46,42 @@ export default function NativeMapViewWrapper({
       style={style}
       region={region}
       onLongPress={e => onMapPress(e)}
+
     >
       {markers.map(marker => (
-        <Marker
-          key={marker.id + marker.status + marker.title}
-          coordinate={marker.coordinate}
-          pinColor={STATUS_COLORS[marker.status] || 'gray'}
-          onPress={() => onMarkerPress(marker.id)}
-        />
+        marker.isCluster ? (
+          <Marker
+            key={marker.id}
+            coordinate={marker.coordinate}
+            tracksViewChanges={false}
+            onPress={() => onMarkerPress(marker.id)}
+          >
+            <View style={{
+              backgroundColor: STATUS_COLORS[marker.status] || 'gray',
+              borderRadius: 24,
+              width: 48,
+              height: 48,
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderWidth: 3,
+              borderColor: '#fff',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.2,
+              shadowRadius: 4,
+              elevation: 4,
+            }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>{marker.count}</Text>
+            </View>
+          </Marker>
+        ) : (
+          <Marker
+            key={marker.id + marker.status + marker.title}
+            coordinate={marker.coordinate}
+            pinColor={STATUS_COLORS[marker.status] || 'gray'}
+            onPress={() => onMarkerPress(marker.id)}
+          />
+        )
       ))}
     </MapView>
   );
