@@ -126,42 +126,30 @@ map-business-tracker/
 
 ## 🌐 Deployment
 
-### Web Deployment (GitHub Pages)
+### Web Deployment (Netlify)
 
 1. **Build the web version**
    ```bash
    npx expo export --platform web
    ```
 
-2. **Deploy to GitHub Pages**
-   - Go to your repository settings
-   - Navigate to "Pages" section
-   - Select "Deploy from a branch"
-   - Choose `gh-pages` branch and `/` folder
-   - Click "Save"
+2. **Deploy to Netlify**
+   - Go to [netlify.com](https://netlify.com) and sign up/login
+   - Click "New site from Git"
+   - Connect your GitHub repository
+   - Set build command: `npx expo export --platform web`
+   - Set publish directory: `dist`
+   - Click "Deploy site"
 
-3. **Set up GitHub Actions** (Optional)
-   Create `.github/workflows/deploy.yml`:
-   ```yaml
-   name: Deploy to GitHub Pages
-   on:
-     push:
-       branches: [ main ]
-   jobs:
-     deploy:
-       runs-on: ubuntu-latest
-       steps:
-       - uses: actions/checkout@v2
-       - uses: actions/setup-node@v2
-         with:
-           node-version: '18'
-       - run: npm install
-       - run: npx expo export --platform web
-       - uses: peaceiris/actions-gh-pages@v3
-         with:
-           github_token: ${{ secrets.GITHUB_TOKEN }}
-           publish_dir: ./dist
-   ```
+3. **Automatic Deployments**
+   - Netlify will automatically rebuild and deploy when you push to your main branch
+   - Each commit will trigger a new deployment
+   - You can view deployment status in your Netlify dashboard
+
+4. **Custom Domain** (Optional)
+   - In your Netlify dashboard, go to "Domain settings"
+   - Add your custom domain
+   - Netlify will provide DNS instructions
 
 ### Mobile Deployment
 
