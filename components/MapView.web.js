@@ -171,6 +171,26 @@ export default function WebMapViewWrapper({
     setMapMounted(true);
   }, []);
 
+  // Add: Patch Leaflet attribution link to open in new tab
+  useEffect(() => {
+    // Wait for the map and attribution control to be rendered
+    const interval = setInterval(() => {
+      const attribution = document.querySelector('.leaflet-control-attribution');
+      if (attribution) {
+        const links = attribution.querySelectorAll('a');
+        links.forEach(link => {
+          if (link.href && link.href.includes('leafletjs.com')) {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener');
+          }
+        });
+        clearInterval(interval);
+      }
+    }, 300);
+    // Clean up
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div style={{ 
       width: '100%', 
