@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, ScrollView, StyleSheet, Platform, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, ScrollView, StyleSheet, Platform, Image, Modal as RNModal } from 'react-native';
 import { useAppContext } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,6 +20,7 @@ export default function SettingsScreen() {
   const [newCompany, setNewCompany] = useState('');
   const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ visible: false, company: null });
 
   const canDelete = (companyId) => businesses.every(b => b.companyId !== companyId);
 
@@ -83,6 +84,18 @@ export default function SettingsScreen() {
       await setCompanyIcon(companyId, base64);
     };
     reader.readAsText(file);
+  };
+
+  // New: clear icon handler
+  const handleClearIcon = async (companyId) => {
+    await setCompanyIcon(companyId, null);
+    setDeleteModal({ visible: false, company: null });
+  };
+
+  // New: delete company handler
+  const handleDeleteCompany = (companyId) => {
+    deleteCompany(companyId);
+    setDeleteModal({ visible: false, company: null });
   };
 
   return (
@@ -190,9 +203,9 @@ export default function SettingsScreen() {
                     {item.customPinIcon ? (
                       (() => {
                         try {
-                          console.log('item.customPinIcon:', item.customPinIcon.slice(0, 100) + '...');
+                          // console.log('item.customPinIcon:', item.customPinIcon.slice(0, 100) + '...');
                           const xml = base64Decode(item.customPinIcon);
-                          console.log('Decoded SVG XML in render:', xml.slice(0, 100) + '...');
+                          // console.log('Decoded SVG XML in render:', xml.slice(0, 100) + '...');
                           return (
                             <SvgXml
                               xml={xml}
@@ -216,7 +229,7 @@ export default function SettingsScreen() {
                     onPress={() => handleUploadSvg(item.id)}
                   >
                     <Ionicons name="cloud-upload" size={18} color="#fff" />
-                    <Text style={styles.uploadButtonText}>Change Icon</Text>
+                    {Platform.OS === 'web' ? <Text style={styles.uploadButtonText}>Change Icon</Text> : null}
                   </TouchableOpacity>
                   {/* Hidden file input for web */}
                   {Platform.OS === 'web' && (
@@ -232,23 +245,10 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   style={[
                     styles.deleteButton,
-                    !canDelete(item.id) && styles.disabledDeleteButton
+                    !canDelete(item.id) && !item.customPinIcon && styles.disabledDeleteButton
                   ]}
-                  disabled={!canDelete(item.id)}
-                  onPress={() => {
-                    Alert.alert(
-                      'Delete Company', 
-                      'Are you sure? Only empty companies can be deleted.', 
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        { 
-                          text: 'Delete', 
-                          style: 'destructive', 
-                          onPress: () => deleteCompany(item.id) 
-                        },
-                      ]
-                    );
-                  }}
+                  disabled={!canDelete(item.id) && !item.customPinIcon}
+                  onPress={() => setDeleteModal({ visible: true, company: item })}
                 >
                   <Ionicons name="trash" size={16} color="#fff" />
                 </TouchableOpacity>
@@ -264,6 +264,113 @@ export default function SettingsScreen() {
             Only companies with no businesses can be deleted.
           </Text>
         </View>
+        {/* Delete Modal */}
+        <RNModal
+          visible={deleteModal.visible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDeleteModal({ visible: false, company: null })}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.25)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{
+              backgroundColor: '#fff',
+              borderRadius: 20,
+              padding: 28,
+              alignItems: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.18,
+              shadowRadius: 12,
+              elevation: 8,
+            }}>
+              <View style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: '#ffeaea',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 18,
+              }}>
+                <Ionicons name="alert" size={32} color="#dc3545" />
+              </View>
+              <Text style={{ fontWeight: '700', fontSize: 20, marginBottom: 10, textAlign: 'center', color: '#2c3e50' }}>
+                {deleteModal.company ? `Delete options for "${deleteModal.company.name}"` : 'Delete options'}
+              </Text>
+              <Text style={{ color: '#6c757d', fontSize: 15, marginBottom: 18, textAlign: 'center' }}>
+                {deleteModal.company && deleteModal.company.customPinIcon && canDelete(deleteModal.company.id)
+                  ? 'You can delete the icon or the company.'
+                  : deleteModal.company && deleteModal.company.customPinIcon
+                  ? 'You can delete the icon.'
+                  : deleteModal.company && canDelete(deleteModal.company.id)
+                  ? 'You can delete the company.'
+                  : 'Cannot delete company with businesses.'}
+              </Text>
+              {deleteModal.company && deleteModal.company.customPinIcon && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#fff0f0',
+                    borderRadius: 10,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 18,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: '#f5c2c7',
+                    width: 220,
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => handleClearIcon(deleteModal.company.id)}
+                >
+                  <Ionicons name="close-circle" size={20} color="#dc3545" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#dc3545', fontWeight: '600', fontSize: 16 }}>Delete Icon</Text>
+                </TouchableOpacity>
+              )}
+              {deleteModal.company && canDelete(deleteModal.company.id) && (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#dc3545',
+                    borderRadius: 10,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 18,
+                    marginBottom: 10,
+                    width: 220,
+                    justifyContent: 'center',
+                    shadowColor: '#dc3545',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                  onPress={() => handleDeleteCompany(deleteModal.company.id)}
+                >
+                  <Ionicons name="trash" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Delete Company</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#f1f3f5',
+                  borderRadius: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 12,
+                  paddingHorizontal: 18,
+                  marginTop: 2,
+                  width: 220,
+                  justifyContent: 'center',
+                }}
+                onPress={() => setDeleteModal({ visible: false, company: null })}
+              >
+                <Ionicons name="close" size={20} color="#6c757d" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#6c757d', fontWeight: '600', fontSize: 16 }}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </RNModal>
       </View>
     </ScrollView>
   );
@@ -323,7 +430,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    marginBottom: 8,
+    marginRight: 8,
   },
   companyName: {
     fontSize: 14,
@@ -455,8 +562,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#dc3545',
     borderRadius: 8,
     padding: 8,
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -495,6 +602,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     aspectRatio: 1,
+    textAlign: 'center',
   },
   uploadButton: {
     flexDirection: 'row',
@@ -504,6 +612,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     marginRight: 8,
+    height: 40,
   },
   uploadButtonText: {
     color: '#fff',
