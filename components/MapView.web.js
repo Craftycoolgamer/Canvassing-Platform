@@ -57,42 +57,53 @@ function createClusterIcon(color, count) {
   });
 }
 
+// Helper to create a custom SVG icon from base64, with dynamic color replacement
+function createCustomSvgIcon(svgBase64, color) {
+  let svgXml = atob(svgBase64);
+
+  // Replace fill attributes (single or double quotes)
+  svgXml = svgXml.replace(/fill=(["'])(#[A-Fa-f0-9]{3,6}|[a-zA-Z]+)\1/gi, `fill="${color}"`);
+
+  // Replace fill in style attributes (e.g., style="fill:#000;")
+  svgXml = svgXml.replace(/fill:\s*(#[A-Fa-f0-9]{3,6}|[a-zA-Z]+);?/gi, `fill:${color};`);
+
+  // Replace fill in <style> tags (CSS)
+  svgXml = svgXml.replace(/fill:\s*(#[A-Fa-f0-9]{3,6}|[a-zA-Z]+)\s*;/gi, `fill:${color};`);
+
+  // Replace any remaining black fills (just in case)
+  svgXml = svgXml.replace(/fill=(["'])(#000|#000000|black)\1/gi, `fill="${color}"`);
+
+  // If there is no fill attribute at all, add one to the first <path>, <circle>, or <rect>
+  if (!/fill=/.test(svgXml)) {
+    svgXml = svgXml.replace(/<(path|circle|rect)(\s|>)/i, `<$1 fill="${color}"$2`);
+  }
+
+  return new L.Icon({
+    iconUrl: `data:image/svg+xml;base64,${btoa(svgXml)}`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -36],
+  });
+}
+
 // Simple component to handle map view changes
-function MapController({ center, zoom, clickedPin }) {
+function MapController({ flyToPin }) {
   const map = useMap();
-  const isInitialMount = useRef(true);
-  
-  // Handle initial mount separately to set the starting position without animation
+
+  // Animate to pin when flyToPin changes
   useEffect(() => {
-    if (isInitialMount.current && map && center && center.latitude && center.longitude) {
-      // On initial mount, set view immediately without animation
-      map.setView([center.latitude, center.longitude], zoom);
-      isInitialMount.current = false;
+    if (map && flyToPin && flyToPin.latitude && flyToPin.longitude) {
+      map.flyTo(
+        [flyToPin.latitude, flyToPin.longitude],
+        flyToPin.zoom !== undefined ? flyToPin.zoom : map.getZoom(),
+        {
+          duration: 1.5,
+          easeLinearity: 0.25,
+        }
+      );
     }
-  }, [map]);
-  
-  // Handle center and zoom changes after initial mount
-  useEffect(() => {
-    if (!isInitialMount.current && map && center && center.latitude && center.longitude) {
-      // Use flyTo with a smooth animation from current position
-      map.flyTo([center.latitude, center.longitude], zoom, {
-        duration: 1.5, // Duration in seconds
-        easeLinearity: 0.25 // Lower value for smoother acceleration/deceleration
-      });
-    }
-  }, [map, center, zoom]);
-  
-  // Handle pin clicks
-  useEffect(() => {
-    if (map && clickedPin && clickedPin.latitude && clickedPin.longitude) {
-      // Use flyTo with a smooth animation from current position
-      map.flyTo([clickedPin.latitude, clickedPin.longitude], 18, {
-        duration: 1.5, // Duration in seconds
-        easeLinearity: 0.25 // Lower value for smoother acceleration/deceleration
-      });
-    }
-  }, [map, clickedPin]);
-  
+  }, [map, flyToPin]);
+
   return null;
 }
 
@@ -106,16 +117,14 @@ export default function WebMapViewWrapper({
   onDelete = () => {},
   onMarkerPress = () => {},
   onZoomChange = () => {},
+  flyToPin = null,
+  onPinAdded = () => {},
 }) {
-  const [clickedPin, setClickedPin] = useState(null);
+  // Remove clickedPin state
+  // const [clickedPin, setClickedPin] = useState(null);
   
   const handleMarkerClick = (markerId) => {
-    const marker = markers.find(m => m.id === markerId);
-    if (marker) {
-      setClickedPin(marker.coordinate);
-      // Clear the clicked pin after a short delay to allow for future clicks
-      setTimeout(() => setClickedPin(null), 100);
-    }
+    // Remove setClickedPin logic
     onMarkerPress(markerId);
   };
 
@@ -124,6 +133,16 @@ export default function WebMapViewWrapper({
     
     useMapEvents({
       click(e) {
+        // Immediately animate to the new pin location from the current map view
+        map.flyTo([e.latlng.lat, e.latlng.lng], map.getZoom(), {
+          duration: 1.5,
+          easeLinearity: 0.25,
+        });
+        // After starting the animation, call onPinAdded to update state
+        if (onPinAdded) {
+          onPinAdded({ latitude: e.latlng.lat, longitude: e.latlng.lng });
+        }
+        // Call onMapPress for legacy
         onMapPress({
           nativeEvent: {
             coordinate: {
@@ -143,6 +162,15 @@ export default function WebMapViewWrapper({
     return null;
   }
   
+  const iconKey = markers.map(m => m.customPinIcon ? m.customPinIcon.slice(0, 8) : '').join(',');
+
+  // Store the initial center in a ref so it doesn't change on re-renders
+  const initialCenterRef = useRef([mapCenter.latitude, mapCenter.longitude]);
+  const [mapMounted, setMapMounted] = useState(false);
+  useEffect(() => {
+    setMapMounted(true);
+  }, []);
+
   return (
     <div style={{ 
       width: '100%', 
@@ -153,7 +181,7 @@ export default function WebMapViewWrapper({
       boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
     }}>
       <MapContainer
-        center={[mapCenter.latitude, mapCenter.longitude]}
+        {...(!mapMounted && { center: initialCenterRef.current })}
         zoom={zoom}
         style={{ 
           width: '100%', 
@@ -170,11 +198,11 @@ export default function WebMapViewWrapper({
       >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution="\u00a9 OpenStreetMap contributors"
+          attribution= ' <a target="_blank" href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
           maxZoom={19}
           minZoom={3}
         />
-        <MapController center={mapCenter} zoom={zoom} clickedPin={clickedPin} />
+        <MapController flyToPin={flyToPin} />
         {markers.map(marker => (
           marker.isCluster ? (
             <Marker
@@ -187,9 +215,13 @@ export default function WebMapViewWrapper({
             />
           ) : (
             <Marker
-              key={marker.id}
+              key={marker.id + (marker.customPinIcon ? marker.customPinIcon.slice(0, 8) : '')}
               position={[marker.coordinate.latitude, marker.coordinate.longitude]}
-              icon={createColoredIcon(STATUS_COLORS[marker.status] || '#6c757d')}
+              icon={
+                marker.customPinIcon
+                  ? createCustomSvgIcon(marker.customPinIcon, STATUS_COLORS[marker.status] || '#6c757d')
+                  : createColoredIcon(STATUS_COLORS[marker.status] || '#6c757d')
+              }
               eventHandlers={{
                 click: () => handleMarkerClick(marker.id),
               }}

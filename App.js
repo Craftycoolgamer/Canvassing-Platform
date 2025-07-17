@@ -5,8 +5,20 @@ import MapScreen from './screens/MapScreen';
 import BusinessListScreen from './screens/BusinessListScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { useAppContext } from './context/AppContext.js';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+// Suppress console logs for move events globally
+if (Platform.OS !== 'web') {
+  const originalConsoleLog = console.log;
+  console.log = function(...args) {
+    const message = args.join(' ');
+    if (message.includes('received') && (message.includes('onMoveStart') || message.includes('onMoveEnd'))) {
+      return; // Suppress move event logs
+    }
+    originalConsoleLog.apply(console, args);
+  };
+}
 
 const Tab = createBottomTabNavigator();
 
@@ -65,8 +77,8 @@ function AppWithHeader() {
             shadowOpacity: 0.1,
             shadowRadius: 4,
             shadowOffset: { width: 0, height: -2 },
-            height: 60,
-            paddingBottom: 8,
+            height: Platform.OS === 'web' ? 60 : 80,
+            paddingBottom: Platform.OS === 'web' ? 8 : 20,
             paddingTop: 8,
           },
           tabBarActiveTintColor: colors.text,

@@ -85,6 +85,7 @@ export default function MapScreen() {
   const [mapKey, setMapKey] = useState(0);
   const [locationPermission, setLocationPermission] = useState(false);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+  const [flyToPin, setFlyToPin] = useState(null);
 
   // Handle zoom changes from MapView (for clustering only)
   const handleZoomChange = (newZoom) => {
@@ -213,22 +214,15 @@ export default function MapScreen() {
   React.useEffect(() => {
     if (route.params && route.params.selectBusinessId) {
       setSelectedBusinessId(route.params.selectBusinessId);
-      // If centerMapTo is provided, update mapCenter and zoom in
+      // If centerMapTo is provided, animate to it (no zoom)
       if (route.params.centerMapTo && route.params.centerMapTo.latitude && route.params.centerMapTo.longitude) {
-        // Update map center and zoom without forcing a re-render of the entire map
-        setMapCenter(route.params.centerMapTo);
-        
-        // Use forceZoom if provided, otherwise default to 18
+        setFlyToPin({ ...route.params.centerMapTo });
         if (route.params.forceZoom) {
           setMapZoom(route.params.forceZoom);
         } else {
-          setMapZoom(18); // Default zoom level when navigating to a specific business
+          setMapZoom(18);
         }
-        
-        // We no longer need to force a complete re-render with the key
-        // as we want to animate from the current position
       }
-      // Clear the params so it doesn't keep re-triggering
       if (navigation && navigation.setParams) {
         navigation.setParams({ selectBusinessId: undefined, centerMapTo: undefined, forceZoom: undefined });
       }
@@ -239,8 +233,8 @@ export default function MapScreen() {
   const selectedCompanyObj = companies.find(c => c.id === selectedCompany);
   const selectedBusiness = filteredBusinesses.find(b => b.id === selectedBusinessId);
 
-  const handleMapPress = (e) => {
-    const coord = e.nativeEvent.coordinate;
+  // New: handlePinAdded for new pins
+  const handlePinAdded = (coord) => {
     const newBusiness = {
       id: Math.random().toString(36).slice(2, 10),
       companyId: selectedCompany,
@@ -263,7 +257,13 @@ export default function MapScreen() {
       return;
     }
     setBusinesses(prev => [...prev, newBusiness]);
-    setMapCenter(coord); // Center map on new pin
+    // Do not setFlyToPin here
+  };
+
+  const handleMapPress = (e) => {
+    const coord = e.nativeEvent.coordinate;
+    // Do not setFlyToPin here; let MapView call onPinAdded
+    // handlePinAdded(coord); // Not called here
   };
 
   const handleEdit = (businessId) => {
@@ -285,6 +285,8 @@ export default function MapScreen() {
           markers={clusters.map(cluster => {
             if (cluster.businesses.length === 1) {
               const b = cluster.businesses[0];
+              // Find the company for this business
+              const company = companies.find(c => c.id === b.companyId);
               return {
                 id: b.id,
                 coordinate: b.latlng,
@@ -292,6 +294,8 @@ export default function MapScreen() {
                 title: b.name,
                 description: b.status,
                 isCluster: false,
+                // Use business customPinIcon if present, else fallback to company customPinIcon
+                customPinIcon: b.customPinIcon || (company && company.customPinIcon) || null,
               };
             } else {
               return {
@@ -306,17 +310,26 @@ export default function MapScreen() {
             }
           })}
           onMapPress={handleMapPress}
-          mapCenter={mapCenter}
           zoom={mapZoom}
           style={styles.map}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          flyToPin={flyToPin}
+          onPinAdded={handlePinAdded}
           onMarkerPress={id => {
             // Check if it's a cluster marker
             if (id.startsWith('cluster-')) {
+              const cluster = clusters.find(c => c.id === id || `cluster-${c.businesses.map(b => b.id).join('-')}` === id);
+              if (cluster) {
+                // Zoom in by 2 levels, capped at 18
+                const targetZoom = Math.min(mapZoom + 2, 18);
+                setFlyToPin({ latitude: cluster.latlng.latitude, longitude: cluster.latlng.longitude, zoom: targetZoom });
+              }
               handleClusterClick(id);
             } else {
               setSelectedBusinessId(id);
+              const business = filteredBusinesses.find(b => b.id === id);
+              if (business) setFlyToPin({ ...business.latlng, zoom: 18 });
             }
           }}
           onZoomChange={handleZoomChange}

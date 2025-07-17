@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
 
 const STATUS_COLORS = {
   open: 'green',
@@ -7,8 +9,8 @@ const STATUS_COLORS = {
 };
 
 const initialCompanies = [
-  { id: '1', name: 'Company A', color: '#e3f2fd' },
-  { id: '2', name: 'Company B', color: '#f3e5f5' },
+  { id: '1', name: 'Company A', color: '#e3f2fd', customPinIcon: null },
+  { id: '2', name: 'Company B', color: '#f3e5f5', customPinIcon: null },
 ];
 const initialBusinesses = [
   { id: 'b1', companyId: '1', name: 'Business 1', status: 'open', latlng: { latitude: 37.78825, longitude: -122.4324 },
@@ -24,6 +26,8 @@ const initialBusinesses = [
     lastContacted: '', canvassedBy: '', visitOutcome: '', tags: [], lastModified: new Date().toISOString(),
     history: [] },
 ];
+
+const ICONS_DIR = FileSystem.documentDirectory + 'company_icons/';
 
 const AppContext = createContext();
 
@@ -54,11 +58,70 @@ export function AppProvider({ children }) {
     setBusinesses(prev => prev.filter(b => b.id !== id));
   };
 
+  // Load custom icons from local storage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const dirInfo = await FileSystem.getInfoAsync(ICONS_DIR);
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(ICONS_DIR, { intermediates: true });
+        }
+        // Load icons for each company
+        const updatedCompanies = await Promise.all(companies.map(async (company) => {
+          const iconPath = ICONS_DIR + company.id + '.svg';
+          const iconInfo = await FileSystem.getInfoAsync(iconPath);
+          if (iconInfo.exists) {
+            const base64 = await FileSystem.readAsStringAsync(iconPath, { encoding: FileSystem.EncodingType.Base64 });
+            return { ...company, customPinIcon: base64 };
+          }
+          return { ...company, customPinIcon: null };
+        }));
+        setCompanies(updatedCompanies);
+      } catch (e) {
+        // fail silently
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Set or update a company's custom SVG icon (base64 string)
+  const setCompanyIcon = async (companyId, base64Svg) => {
+    const iconPath = ICONS_DIR + companyId + '.svg';
+    try {
+      if (Platform.OS === 'web') {
+        // On web, just update state (optionally persist to localStorage)
+        console.log('setCompanyIcon (web) called for', companyId, 'with base64Svg:', base64Svg ? base64Svg.slice(0, 100) + '...' : null);
+        setCompanies(prev => {
+          const updated = prev.map(c => c.id === companyId ? { ...c, customPinIcon: base64Svg } : c);
+          console.log('setCompanies (web) new value:', updated);
+          // Optionally persist to localStorage here
+          return updated;
+        });
+        return;
+      }
+      // Native: persist to FileSystem
+      if (base64Svg) {
+        await FileSystem.writeAsStringAsync(iconPath, base64Svg, { encoding: FileSystem.EncodingType.Base64 });
+      } else {
+        await FileSystem.deleteAsync(iconPath, { idempotent: true });
+      }
+      console.log('setCompanyIcon (native) called for', companyId, 'with base64Svg:', base64Svg ? base64Svg.slice(0, 100) + '...' : null);
+      setCompanies(prev => {
+        const updated = prev.map(c => c.id === companyId ? { ...c, customPinIcon: base64Svg } : c);
+        console.log('setCompanies (native) new value:', updated);
+        return updated;
+      });
+    } catch (e) {
+      console.log('setCompanyIcon error:', e);
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       companies, setCompanies, addCompany, deleteCompany,
       businesses, setBusinesses, addBusiness, deleteBusiness,
       selectedCompany, setSelectedCompany,
+      setCompanyIcon, // <-- expose setter
     }}>
       {children}
     </AppContext.Provider>

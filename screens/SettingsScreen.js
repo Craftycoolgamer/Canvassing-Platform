@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert, ScrollView, StyleSheet, Platform, Image } from 'react-native';
 import { useAppContext } from '../context/AppContext';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import Svg, { SvgXml } from 'react-native-svg';
+import { decode as base64Decode } from 'base-64';
+import * as FileSystem from 'expo-file-system';
+import { encode as base64Encode } from 'base-64';
+import * as DocumentPicker from 'expo-document-picker';
 
 const COLOR_OPTIONS = [
   '#e3f2fd', '#f3e5f5', '#e8f5e8', '#fff3e0', '#fce4ec', 
@@ -9,7 +15,8 @@ const COLOR_OPTIONS = [
 ];
 
 export default function SettingsScreen() {
-  const { companies, addCompany, deleteCompany, businesses, selectedCompany, setSelectedCompany } = useAppContext();
+  const { companies, addCompany, deleteCompany, businesses, selectedCompany, setSelectedCompany, setCompanyIcon } = useAppContext();
+  const fileInputRefs = useRef({}); // For web file inputs
   const [newCompany, setNewCompany] = useState('');
   const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -23,6 +30,59 @@ export default function SettingsScreen() {
       setSelectedColor(COLOR_OPTIONS[0]);
       setShowColorPicker(false);
     }
+  };
+
+  // SVG upload handler
+  const handleUploadSvg = async (companyId) => {
+    console.log('Upload button pressed for company:', companyId);
+    if (Platform.OS === 'web') {
+      // Trigger the hidden file input
+      if (fileInputRefs.current[companyId]) {
+        fileInputRefs.current[companyId].value = '';
+        fileInputRefs.current[companyId].click();
+      }
+      return;
+    }
+    try {
+      let result = await DocumentPicker.getDocumentAsync({
+        type: 'image/svg+xml',
+        copyToCacheDirectory: true,
+      });
+      console.log('DocumentPicker result:', result);
+      if (result.assets && result.assets[0] && result.assets[0].uri) {
+        const asset = result.assets[0];
+        console.log('DocumentPicker success, uri:', asset.uri);
+        const svgText = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.UTF8 });
+        const base64 = base64Encode(svgText);
+        console.log('Uploading SVG for company:', companyId);
+        console.log('SVG base64:', base64.slice(0, 100) + '...');
+        await setCompanyIcon(companyId, base64);
+      } else {
+        console.log('DocumentPicker not success or no uri');
+      }
+    } catch (e) {
+      console.log('SVG upload error:', e);
+      Alert.alert('Error', 'Failed to upload SVG icon.');
+    }
+  };
+
+  // Web file input change handler
+  const handleFileInputChange = async (e, companyId) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.endsWith('.svg') && file.type !== 'image/svg+xml') {
+      alert('Please select an SVG file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const svgText = event.target.result;
+      const base64 = btoa(unescape(encodeURIComponent(svgText)));
+      console.log('Uploading SVG for company:', companyId);
+      console.log('SVG base64:', base64.slice(0, 100) + '...');
+      await setCompanyIcon(companyId, base64);
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -117,11 +177,57 @@ export default function SettingsScreen() {
           <FlatList
             data={companies}
             keyExtractor={item => item.id}
+            extraData={companies}
             renderItem={({ item }) => (
               <View style={styles.companyListItem}>
                 <View style={styles.companyInfo}>
                   <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
                   <Text style={styles.companyName}>{item.name}</Text>
+                </View>
+                {/* SVG Icon Preview and Upload */}
+                <View style={styles.iconUploadContainer}>
+                  <View style={styles.iconPreviewWrapper}>
+                    {item.customPinIcon ? (
+                      (() => {
+                        try {
+                          console.log('item.customPinIcon:', item.customPinIcon.slice(0, 100) + '...');
+                          const xml = base64Decode(item.customPinIcon);
+                          console.log('Decoded SVG XML in render:', xml.slice(0, 100) + '...');
+                          return (
+                            <SvgXml
+                              xml={xml}
+                              width={36}
+                              height={36}
+                              style={styles.iconPreview}
+                              preserveAspectRatio="xMidYMid meet"
+                            />
+                          );
+                        } catch (e) {
+                          console.log('SVG render error:', e);
+                          return <Ionicons name="alert-circle" size={32} color="#f00" style={styles.iconPreview} />;
+                        }
+                      })()
+                    ) : (
+                      <Ionicons name="location" size={32} color="#888" style={styles.iconPreview} />
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={() => handleUploadSvg(item.id)}
+                  >
+                    <Ionicons name="cloud-upload" size={18} color="#fff" />
+                    <Text style={styles.uploadButtonText}>Change Icon</Text>
+                  </TouchableOpacity>
+                  {/* Hidden file input for web */}
+                  {Platform.OS === 'web' && (
+                    <input
+                      type="file"
+                      accept=".svg,image/svg+xml"
+                      style={{ display: 'none' }}
+                      ref={el => (fileInputRefs.current[item.id] = el)}
+                      onChange={e => handleFileInputChange(e, item.id)}
+                    />
+                  )}
                 </View>
                 <TouchableOpacity
                   style={[
@@ -369,5 +475,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     flex: 1,
+  },
+  iconUploadContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 8,
+  },
+  iconPreviewWrapper: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  iconPreview: {
+    width: 36,
+    height: 36,
+    aspectRatio: 1,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007bff',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  uploadButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 4,
   },
 }); 
